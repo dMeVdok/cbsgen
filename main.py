@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from torchtext import data
 from torchtext import datasets
+import numpy as np
 import time
 import random
 import string
@@ -26,13 +27,27 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 TEXT_PORTION_SIZE = 200
 
-NUM_ITER = 20000
+EPOCHS_PER_STRING = 1
 LEARNING_RATE = 0.005
 EMBEDDING_DIM = 100
 HIDDEN_DIM = 100
 NUM_HIDDEN = 1
+DROPOUT = 0
 
-good_chars = "~ ()!?.,;-йцукенгшщзхъфывапролджэячсмитьбюёЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭЯЧСМИТЬБЮЁqwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM"
+STRLEN_REG_COEF = 0.1
+WRDLEN_REG_COEF = 0.1
+CHRREP_REG_COEF = 0.3
+WRDREP_REG_COEF = 0.3
+
+num_iterations = 1
+avg_str_len = 10
+avg_word_len = 7
+avg_char_repeat = 0
+avg_word_repeat = 0
+
+good_chars = "~ ()!?.,;0123456789😀😁😂🤣😃😄😅😆😉😊😋😎😍😘🥰😗😙😚️🙂🤗🤩🤔🤨😐😑😶🙄-—йцукенгшщзхъфывапролджэячсмитьбюёЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭЯЧСМИТЬБЮЁqwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM"
+
+start_chars = "ЙЦУКЕНГШЩЗХФВАПРОЛДЖЭЯЧСМИТБЮЁ"
 
 stopping_chars = ".!?"
 
@@ -40,14 +55,8 @@ stopping_chars = ".!?"
 def char_to_tensor(text, test=False):
     if not test:
         text = "~" + text
-        if len(text) == 0:
-            text = " "
-        if len(text) < TEXT_PORTION_SIZE + 1:
-            if text[-1] not in stopping_chars:
-                text = text + "."
-            text = text.ljust(TEXT_PORTION_SIZE + 1)
-        if len(text) > TEXT_PORTION_SIZE + 1:
-            text = text[: TEXT_PORTION_SIZE + 1]
+        if text[-1] not in stopping_chars:
+            text = text + "."
     lst = [good_chars.index(c) for c in text]
     tensor = torch.tensor(lst).long()
     return tensor
@@ -70,7 +79,7 @@ class RNN(torch.nn.Module):
 
         self.embed = torch.nn.Embedding(input_size, hidden_size)
         self.gru = torch.nn.GRU(
-            input_size=embed_size, hidden_size=hidden_size, num_layers=num_layers
+            input_size=embed_size, hidden_size=hidden_size, num_layers=num_layers, dropout=DROPOUT
         )
         self.fc = torch.nn.Linear(hidden_size, output_size)
         self.init_hidden = torch.nn.Parameter(torch.zeros(num_layers, 1, hidden_size))
@@ -92,7 +101,7 @@ model = model.to(DEVICE)
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
 
-def evaluate(model, prime_str="~", predict_len=100, temperature=0.6):
+def evaluate(model, prime_str="~", predict_len=256, temperature=0.7):
     ## based on https://github.com/spro/practical-pytorch/
     ## blob/master/char-rnn-generation/char-rnn-generation.ipynb
 
@@ -118,23 +127,59 @@ def evaluate(model, prime_str="~", predict_len=100, temperature=0.6):
 
     return predicted
 
+def count_stat(s):
+    global num_iterations
+    global avg_str_len
+    global avg_word_len
+    global avg_char_repeat
+    global avg_word_repeat
+    def navg(a,v):
+        return (num_iterations * a + v) / (num_iterations + 1)
+    avg_str_len = navg(avg_str_len, len(s))
+    avg_word_len = navg(avg_word_len, np.average([len(x) for x in s.split(' ')]))
+    avg_char_repeat = navg(avg_char_repeat, count_repeats(s))
+    avg_word_repeat = navg(avg_word_repeat, count_repeats(s.split(' ')))
+    num_iterations += 1
 
-def train_on_one(text):
+
+def count_repeats(s):
+    if len(s) <= 1: return 0
+    l = s[0]
+    r = 0
+    for c in s[1:]:
+        if c==l:
+            r+=1
+        l=c
+    return r
+
+
+def train_on_one(text, word=False):
     global model
     global queue_true_size
-    for i in range(10):
+    if not word: count_stat(text)
+    for i in range(EPOCHS_PER_STRING):
         hidden = model.init_zero_state()
         optimizer.zero_grad()
         loss = 0.0
         inputs, targets = get_train_target(text)
         inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
-        for c in range(TEXT_PORTION_SIZE):
+        predicted_string = ""
+        for c in range(len(text)):
             outputs, hidden = model(inputs[c], hidden)
+            a, b = outputs.max(1)
+            predicted_char = good_chars[np.array(b)[0]]
+            predicted_string += predicted_char
             loss += F.cross_entropy(outputs, targets[c].view(1))
-        loss /= TEXT_PORTION_SIZE
+        loss /= len(text)
+        word_len = len(predicted_string.split(' '))
+        str_len = len(predicted_string)
+        num_char_repeats, num_word_repeats = count_repeats(predicted_string), count_repeats(predicted_string.split(' '))
+        loss += STRLEN_REG_COEF * ((str_len - avg_str_len)**2 / avg_str_len**2)
+        loss += WRDLEN_REG_COEF * ((word_len - avg_word_len)**2 / avg_word_len**2)
+        loss += CHRREP_REG_COEF if num_char_repeats > avg_char_repeat else 0
+        loss += WRDREP_REG_COEF if num_word_repeats > avg_word_repeat else 0 
         loss.backward()
         optimizer.step()
-    queue_true_size -= 1
 
 def preprocess_text(t):
     t = re.sub(r"\n+", r"\n",t)
@@ -157,10 +202,18 @@ def add_to_queue(text):
 
 def training_thread():
     global training_active_thread
+    global queue_true_size
     while True:
         if not training_queue.empty():
             string = training_queue.get()
-            train_on_one(string)
+            try:
+                train_on_one(string)
+                for word in string.split(' '):
+                    if len(word) > 0:
+                        train_on_one(word, word=True)
+            except Exception:
+                pass
+            queue_true_size -= 1
         else:
             training_active_thread = None
             return
@@ -169,7 +222,7 @@ def training_thread():
 def inference_one():
     with torch.set_grad_enabled(False):
         return (
-            evaluate(model, "~", 200)[1:]
+            evaluate(model, random.choice(start_chars), 512)
             .split("?")[0]
             .split("!")[0]
             .split(".")[0]
