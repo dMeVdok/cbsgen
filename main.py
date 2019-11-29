@@ -35,10 +35,10 @@ HIDDEN_DIM = 100
 NUM_HIDDEN = 1
 DROPOUT = 0
 
-STRLEN_REG_COEF = 0.2
-WRDLEN_REG_COEF = 0.2
-CHRREP_REG_COEF = 0
-WRDREP_REG_COEF = 0
+STRLEN_REG_COEF = 0.1
+WRDLEN_REG_COEF = 0.1
+CHRREP_REG_COEF = 0.1
+WRDREP_REG_COEF = 0.1
 
 pretrain = False
 
@@ -420,7 +420,7 @@ def random_line(afile):
 def pretrain100():
     file_name = random.choice(glob.glob("./data/*.txt"))
     for i in range(5):
-        with open(file_name, "r") as file:
+        with open(file_name, "r", encoding="utf-8") as file:
             add_to_queue(random_line(file))
 
 if __name__ == "__main__":
