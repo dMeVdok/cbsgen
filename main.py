@@ -11,6 +11,7 @@ import re
 import queue
 import threading
 import psutil
+import glob
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -34,10 +35,12 @@ HIDDEN_DIM = 100
 NUM_HIDDEN = 1
 DROPOUT = 0
 
-STRLEN_REG_COEF = 0.1
-WRDLEN_REG_COEF = 0.1
-CHRREP_REG_COEF = 0.3
-WRDREP_REG_COEF = 0.3
+STRLEN_REG_COEF = 0.2
+WRDLEN_REG_COEF = 0.2
+CHRREP_REG_COEF = 0
+WRDREP_REG_COEF = 0
+
+pretrain = False
 
 num_iterations = 1
 avg_str_len = 10
@@ -101,7 +104,7 @@ model = model.to(DEVICE)
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
 
-def evaluate(model, prime_str="~", predict_len=256, temperature=0.7):
+def evaluate(model, prime_str="~", predict_len=256, temperature=0.8):
     ## based on https://github.com/spro/practical-pytorch/
     ## blob/master/char-rnn-generation/char-rnn-generation.ipynb
 
@@ -203,17 +206,21 @@ def add_to_queue(text):
 def training_thread():
     global training_active_thread
     global queue_true_size
+    def train_one_wrapper(string):
+        if len(string)<3: return
+        words = string.split(' ')
+        for i in range(len(words)):
+            train_on_one(string)
+        for word in words:
+            if len(word) > 0:
+                train_on_one(word, word=True)
     while True:
         if not training_queue.empty():
             string = training_queue.get()
-            try:
-                train_on_one(string)
-                for word in string.split(' '):
-                    if len(word) > 0:
-                        train_on_one(word, word=True)
-            except Exception:
-                pass
+            train_one_wrapper(string)
             queue_true_size -= 1
+        elif pretrain and queue_true_size < 1000:
+            pretrain100()
         else:
             training_active_thread = None
             return
@@ -222,7 +229,7 @@ def training_thread():
 def inference_one():
     with torch.set_grad_enabled(False):
         return (
-            evaluate(model, random.choice(start_chars), 512)
+            evaluate(model, "~" + random.choice(start_chars), 512)
             .split("?")[0]
             .split("!")[0]
             .split(".")[0]
@@ -382,12 +389,29 @@ def load_model():
     global model
     model.load_state_dict(torch.load("model.pth"))
 
+def random_line(afile):
+    line = next(afile)
+    for num, aline in enumerate(afile, 2):
+      if random.randrange(num): continue
+      line = aline
+    return line
+
+def pretrain100():
+    file_name = random.choice(glob.glob("./data/*.txt"))
+    for i in range(100):
+        with open(file_name, "r") as file:
+            add_to_queue(random_line(file))
 
 if __name__ == "__main__":
 
     from sys import argv
 
     if len(argv) == 2:
-        run(port=int(argv[1]))
+        if argv[1] == "pretrain":
+            pretrain = True
+            add_to_queue('')
+            run()
+        else:
+            run(port=int(argv[1]))
     else:
         run()
