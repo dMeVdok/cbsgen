@@ -331,7 +331,8 @@ class S(BaseHTTPRequestHandler):
             self.wfile.write(response.encode("utf-8"))
             return
         if self.path == "/state":
-            response = '{"queue_size": %d, "cpu": %f, "mem": %f}' % (
+            response = '{"trained": %d, "queue_size": %d, "cpu": %f, "mem": %f}' % (
+                num_iterations,
                 queue_true_size,
                 psutil.cpu_percent(),
                 psutil.virtual_memory()._asdict()["percent"],
