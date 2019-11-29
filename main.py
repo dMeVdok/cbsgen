@@ -48,6 +48,10 @@ avg_word_len = 7
 avg_char_repeat = 0
 avg_word_repeat = 0
 
+last_epoch_loss = 9000
+losses = []
+loss_std = 9000
+
 good_chars = "~ ()!?.,;0123456789😀😁😂🤣😃😄😅😆😉😊😋😎😍😘🥰😗😙😚️🙂🤗🤩🤔🤨😐😑😶🙄-—йцукенгшщзхъфывапролджэячсмитьбюёЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭЯЧСМИТЬБЮЁqwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM"
 
 start_chars = "ЙЦУКЕНГШЩЗХФВАПРОЛДЖЭЯЧСМИТБЮЁ"
@@ -159,6 +163,9 @@ def count_repeats(s):
 def train_on_one(text, word=False):
     global model
     global queue_true_size
+    global last_epoch_loss
+    global losses
+    global loss_std
     if not word: count_stat(text)
     for i in range(EPOCHS_PER_STRING):
         hidden = model.init_zero_state()
@@ -181,6 +188,10 @@ def train_on_one(text, word=False):
         loss += WRDLEN_REG_COEF * ((word_len - avg_word_len)**2 / avg_word_len**2)
         loss += CHRREP_REG_COEF if num_char_repeats > avg_char_repeat else 0
         loss += WRDREP_REG_COEF if num_word_repeats > avg_word_repeat else 0 
+        if not word:
+            last_epoch_loss = round(float(loss),5)
+            losses.append(round(float(loss),5))
+            loss_std = np.std(losses)
         loss.backward()
         optimizer.step()
 
@@ -272,6 +283,13 @@ simple_html_interface = r"""
         div {
             margin-top: 0.6em;
         }
+
+        #state {
+            padding-top: 2em;
+            width: 300px;
+            margin: auto;
+            word-wrap: break-word;
+        }
     </style>
     <script type="text/javascript">
     function train() {
@@ -331,11 +349,13 @@ class S(BaseHTTPRequestHandler):
             self.wfile.write(response.encode("utf-8"))
             return
         if self.path == "/state":
-            response = '{"trained": %d, "queue_size": %d, "cpu": %f, "mem": %f}' % (
+            response = '{"trained": %d, "queue_size": %d, "cpu": %f, "mem": %f, "last_epoch_loss": %f, "loss_std": %f}' % (
                 num_iterations,
                 queue_true_size,
                 psutil.cpu_percent(),
                 psutil.virtual_memory()._asdict()["percent"],
+                last_epoch_loss,
+                loss_std
             )
             self._set_response("text/plain")
             self.wfile.write(response.encode("utf-8"))
