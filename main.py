@@ -215,12 +215,12 @@ def training_thread():
             if len(word) > 0:
                 train_on_one(word, word=True)
     while True:
+        if pretrain and queue_true_size < 1000:
+            pretrain100()
         if not training_queue.empty():
             string = training_queue.get()
             train_one_wrapper(string)
             queue_true_size -= 1
-        elif pretrain and queue_true_size < 1000:
-            pretrain100()
         else:
             training_active_thread = None
             return
@@ -398,7 +398,7 @@ def random_line(afile):
 
 def pretrain100():
     file_name = random.choice(glob.glob("./data/*.txt"))
-    for i in range(100):
+    for i in range(5):
         with open(file_name, "r") as file:
             add_to_queue(random_line(file))
 
