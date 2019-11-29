@@ -7,6 +7,7 @@ COPY requirements.txt /tmp/requirements.txt
 RUN pip3 install -r /tmp/requirements.txt
 
 RUN mkdir /home/service
+ADD data /home/service/data
 COPY main.py /home/service/main.py
 
 WORKDIR /home/service
