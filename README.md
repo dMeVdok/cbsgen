@@ -52,3 +52,11 @@ Save model weights to `/home/service/model.pth` (use while running in docker)
 ### GET /restore
 
 Load model weights
+
+## pretraining feature
+
+You can easily start pretraining a generator from `./data/*.txt` files (each is a bunch of sentences separated with `\n`) by running:
+
+```
+python3 main.py pretrain
+```
