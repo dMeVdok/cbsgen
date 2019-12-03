@@ -30,15 +30,15 @@ TEXT_PORTION_SIZE = 200
 
 EPOCHS_PER_STRING = 1
 LEARNING_RATE = 0.005
-EMBEDDING_DIM = 100
-HIDDEN_DIM = 100
+EMBEDDING_DIM = 44
+HIDDEN_DIM = 44
 NUM_HIDDEN = 1
 DROPOUT = 0
 
-STRLEN_REG_COEF = 0.1
-WRDLEN_REG_COEF = 0.1
-CHRREP_REG_COEF = 0.1
-WRDREP_REG_COEF = 0.1
+STRLEN_REG_COEF = 0
+WRDLEN_REG_COEF = 0
+CHRREP_REG_COEF = 0
+WRDREP_REG_COEF = 0
 
 pretrain = False
 
@@ -52,9 +52,9 @@ last_epoch_loss = 9000
 losses = []
 loss_std = 9000
 
-good_chars = "~ ()!?.,;0123456789😀😁😂🤣😃😄😅😆😉😊😋😎😍😘🥰😗😙😚️🙂🤗🤩🤔🤨😐😑😶🙄-—йцукенгшщзхъфывапролджэячсмитьбюёЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭЯЧСМИТЬБЮЁqwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM"
+good_chars = "~ ()!?.,;-—йцукенгшщзхъфывапролджэячсмитьбюё"
 
-start_chars = "ЙЦУКЕНГШЩЗХФВАПРОЛДЖЭЯЧСМИТБЮЁ"
+start_chars = "йцукенгшщзхфвапролджэячсмитбюё"
 
 stopping_chars = ".!?"
 
@@ -196,6 +196,7 @@ def train_on_one(text, word=False):
         optimizer.step()
 
 def preprocess_text(t):
+    t = t.lower()
     t = re.sub(r"\n+", r"\n",t)
     return t
 
@@ -245,7 +246,7 @@ def inference_one():
             .split("!")[0]
             .split(".")[0]
             .replace("~", "")
-            .strip()
+            .strip().capitalize()
         )
 
 
